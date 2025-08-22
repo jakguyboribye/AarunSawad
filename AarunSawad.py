@@ -7,14 +7,12 @@ import json
 from datetime import datetime
 from dotenv import load_dotenv
 import requests
-from flask import Flask, send_file
+from flask import Flask, send_file, request
 from PIL import Image
 
-# --- Load environment variables ---
 load_dotenv()
 LINE_TOKEN = os.getenv("CHANNEL_ACCESS_TOKEN")
 
-# --- Flask app to serve image ---
 app = Flask(__name__)
 IMAGE_PATH = "goodmorning.png"  # temp image
 
@@ -22,11 +20,9 @@ IMAGE_PATH = "goodmorning.png"  # temp image
 def serve_image():
     return send_file(IMAGE_PATH, mimetype="image/png")
 
-# Load quotes
 with open("quotes.json", encoding="utf-8") as f:
     quotes_data = json.load(f)
 
-# Map weekday
 WEEKDAY_MAP = {
     0: "Monday",
     1: "Tuesday",
@@ -37,7 +33,9 @@ WEEKDAY_MAP = {
     6: "Sunday"
 }
 
-# Pick a random image
+def get_today_name():
+    return WEEKDAY_MAP.get(datetime.now().weekday(), "Monday")
+
 def pick_today_image():
     today = get_today_name()
     base_dir = os.path.dirname(__file__)
@@ -47,53 +45,51 @@ def pick_today_image():
                   if f.lower().endswith((".png", ".jpg", ".jpeg"))]
         if images:
             return random.choice(images)
-        else:
-            print(f"No images found in {bg_folder}")
-    else:
-        print(f"Folder not found: {bg_folder}")
     return None
 
-# format image to LINE format
 def prepare_image_for_line(src_path):
     with Image.open(src_path) as img:
         max_size = (1024, 1024)
         img.thumbnail(max_size, Image.LANCZOS)
         img.save(IMAGE_PATH, optimize=True, quality=90)
 
-# using LINE broadcast
 def broadcast_with_quote_and_image(image_url, text_quote):
     url = "https://api.line.me/v2/bot/message/broadcast"
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {LINE_TOKEN}",
     }
-
     # Send text first
-    text_payload = {"messages": [{"type": "text", "text": text_quote}]}
-    response = requests.post(url, headers=headers, json=text_payload)
-    if response.status_code == 200:
-        print("Text broadcast sent successfully!")
-    else:
-        print(f"Failed to send text. Status: {response.status_code}, Response: {response.text}")
-
+    requests.post(url, headers=headers, json={"messages": [{"type": "text", "text": text_quote}]})
     # Send image second
-    image_payload = {
-        "messages": [
-            {"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url}
-        ]
-    }
-    response = requests.post(url, headers=headers, json=image_payload)
-    if response.status_code == 200:
-        print("Image broadcast sent successfully!")
-    else:
-        print(f"Failed to send image. Status: {response.status_code}, Response: {response.text}")
+    requests.post(url, headers=headers, json={
+        "messages": [{"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url}]
+    })
 
-# get current day
-def get_today_name():
-    weekday_index = datetime.now().weekday()
-    return WEEKDAY_MAP.get(weekday_index, "Monday")
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    body = request.get_json()
+    for event in body.get("events", []):
+        if event.get("type") == "message" and event["message"]["type"] == "text":
+            user_text = event["message"]["text"].strip().lower()
+            if user_text == "aarunsawad":  # trigger word
+                reply_token = event["replyToken"]
+                today = get_today_name()
+                quote_list = quotes_data.get(today, ["Good Morning! ☀️"])
+                quote = random.choice(quote_list)
+                # Reply to user
+                url = "https://api.line.me/v2/bot/message/reply"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {LINE_TOKEN}"
+                }
+                payload = {
+                    "replyToken": reply_token,
+                    "messages": [{"type": "text", "text": quote}]
+                }
+                requests.post(url, headers=headers, json=payload)
+    return "OK", 200
 
-# schedule broadcast at 7 am
 def scheduler(public_url):
     while True:
         now = datetime.now()
@@ -105,12 +101,9 @@ def scheduler(public_url):
                 quote_list = quotes_data.get(today, ["Good Morning! ☀️"])
                 quote = random.choice(quote_list)
                 broadcast_with_quote_and_image(f"{public_url}/goodmorning.png", quote)
-            else:
-                print("No image found for today!")
             time.sleep(60)
         time.sleep(10)
 
-# testing
 def test_mode(public_url):
     while True:
         cmd = input("Type 'test' to broadcast today's image and quote now: ")
@@ -122,15 +115,10 @@ def test_mode(public_url):
                 quote_list = quotes_data.get(today, ["Good Morning! ☀️"])
                 quote = random.choice(quote_list)
                 broadcast_with_quote_and_image(f"{public_url}/goodmorning.png", quote)
-            else:
-                print("No image found for today!")
 
 if __name__ == "__main__":
-    public_url = "https://aarunsawad.onrender.com"
-
-    # Start scheduler and test threads
+    public_url = "https://aarunsawad.onrender.com"  # Replace with your Render public URL
     threading.Thread(target=scheduler, args=(public_url,), daemon=True).start()
     threading.Thread(target=test_mode, args=(public_url,), daemon=True).start()
-
-    print("Broadcast bot running. Type 'test' to broadcast immediately.")
+    print("Bot running. Listening for LINE events + 7AM broadcast.")
     app.run(port=5000)
