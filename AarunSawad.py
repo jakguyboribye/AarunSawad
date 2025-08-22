@@ -69,26 +69,8 @@ def broadcast_with_quote_and_image(image_url, text_quote):
 @app.route("/webhook", methods=["POST"])
 def webhook():
     body = request.get_json()
-    for event in body.get("events", []):
-        if event.get("type") == "message" and event["message"]["type"] == "text":
-            user_text = event["message"]["text"].strip().lower()
-            if user_text == "aarunsawad":  # trigger word
-                reply_token = event["replyToken"]
-                today = get_today_name()
-                quote_list = quotes_data.get(today, ["Good Morning! ☀️"])
-                quote = random.choice(quote_list)
-                # Reply to user
-                url = "https://api.line.me/v2/bot/message/reply"
-                headers = {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {LINE_TOKEN}"
-                }
-                payload = {
-                    "replyToken": reply_token,
-                    "messages": [{"type": "text", "text": quote}]
-                }
-                requests.post(url, headers=headers, json=payload)
-    return "OK", 200
+    print("Webhook received:", body)
+    return "Webhook received", 200
 
 def scheduler(public_url):
     while True:
