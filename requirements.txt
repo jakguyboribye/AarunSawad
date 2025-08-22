@@ -1,6 +1,4 @@
-flask
-requests
+Flask
 python-dotenv
-pillow
-ngrok
-pyngrok
+requests
+Pillow
