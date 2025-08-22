@@ -126,7 +126,7 @@ def test_mode(public_url):
                 print("No image found for today!")
 
 if __name__ == "__main__":
-    public_url = "https://d56b7f288a87.ngrok-free.app"
+    public_url = "https://aarunsawad.onrender.com"
 
     # Start scheduler and test threads
     threading.Thread(target=scheduler, args=(public_url,), daemon=True).start()
